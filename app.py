@@ -95,15 +95,15 @@ def engineer_features_for_app(input_df_raw):
 # --- Main Application ---
 def main():
     st.set_page_config(page_title="Bank Marketing Prediction", layout="wide")
-    st.title("🏦 Bank Term Deposit Subscription Prediction (v2.4 Pipeline)")
+    st.title("🏦 Bank Term Deposit Subscription Prediction")  # Removed (v2.4 Pipeline) for client view
     st.markdown("""
         This app predicts whether a customer will subscribe to a term deposit.
         Provide the customer's details below.
-        **Important**: Ensure `MODEL_PATH` and `OPTIMAL_THRESHOLD` constants in the script are correctly set based on your training results from the **v2.4 pipeline**.
     """)
 
     pipeline = load_model(MODEL_PATH)
     if pipeline is None:
+        st.sidebar.error("Model is not available. Please contact support.")
         return
 
     st.sidebar.header("Customer Input Features:")
@@ -114,11 +114,11 @@ def main():
     marital_options = ['divorced', 'married', 'single', 'unknown']
     education_options = ['basic.4y', 'basic.6y', 'basic.9y', 'high.school', 'illiterate', 'professional.course',
                          'university.degree', 'unknown']
-    default_options = ['no', 'unknown', 'yes']  # 'unknown' is a valid category
+    default_options = ['no', 'unknown', 'yes']
     housing_options = ['no', 'unknown', 'yes']
     loan_options = ['no', 'unknown', 'yes']
     contact_options = ['cellular', 'telephone']
-    poutcome_options = ['failure', 'nonexistent', 'success', 'unknown']  # 'unknown' can be a poutcome if not filtered
+    poutcome_options = ['failure', 'nonexistent', 'success', 'unknown']
 
     with st.sidebar.form("input_form"):
         st.subheader("Personal Information")
@@ -133,7 +133,7 @@ def main():
         housing = st.selectbox("Has Housing Loan?", options=housing_options, index=housing_options.index('yes'))
         loan = st.selectbox("Has Personal Loan?", options=loan_options, index=loan_options.index('no'))
 
-        st.subheader("Last Contact Information")
+        st.subheader("Previous Contact Information")  # Renamed for clarity
         contact = st.selectbox("Contact Communication Type", options=contact_options,
                                index=contact_options.index('cellular'))
         # month and day_of_week are removed as per v2.2+ pipeline
@@ -146,48 +146,46 @@ def main():
         poutcome = st.selectbox("Outcome of Previous Campaign", options=poutcome_options,
                                 index=poutcome_options.index('nonexistent'))
 
-        st.subheader("Socioeconomic Context")
-        emp_var_rate = st.number_input("Employment Variation Rate", value=1.1, format="%.1f")
-        cons_price_idx = st.number_input("Consumer Price Index", value=93.994, format="%.3f")
-        cons_conf_idx = st.number_input("Consumer Confidence Index", value=-36.4, format="%.1f")
-        euribor3m = st.number_input("Euribor 3 Month Rate", value=4.857, format="%.3f")
-        nr_employed = st.number_input("Number of Employees", value=5191.0, format="%.1f")
+        # Socioeconomic Context fields are NOT displayed to the client
+        # Their default values will be used directly.
+        # emp_var_rate_default = 1.1
+        # cons_price_idx_default = 93.994
+        # cons_conf_idx_default = -36.4
+        # euribor3m_default = 4.857
+        # nr_employed_default = 5191.0
 
         submit_button = st.form_submit_button(label="Predict Subscription")
 
     if submit_button:
+        # Use hardcoded default values for socioeconomic context features
+        # These values are taken from the previous version's st.number_input defaults
         input_data_raw = {
             'age': age, 'job': job, 'marital': marital, 'education': education,
             'default': default, 'housing': housing, 'loan': loan, 'contact': contact,
             'campaign': campaign, 'pdays': pdays, 'previous': previous, 'poutcome': poutcome,
-            'emp.var.rate': emp_var_rate, 'cons.price.idx': cons_price_idx,
-            'cons.conf.idx': cons_conf_idx, 'euribor3m': euribor3m, 'nr.employed': nr_employed
+            'emp.var.rate': 1.1,  # Hardcoded default
+            'cons.price.idx': 93.994,  # Hardcoded default
+            'cons.conf.idx': -36.4,  # Hardcoded default
+            'euribor3m': 4.857,  # Hardcoded default
+            'nr.employed': 5191.0  # Hardcoded default
         }
         input_df_raw = pd.DataFrame([input_data_raw])
         input_df_engineered = engineer_features_for_app(input_df_raw)
 
         # Define the exact order of columns the *loaded preprocessor* expects.
-        # This order is derived from the v2.4 training script:
-        # numerical_features + categorical_features_to_impute + categorical_features_direct_ohe
-        # The names here are *before* any "Other_" consolidation by the training script's rare category handling,
-        # as the app's engineer_features doesn't do that step.
-
-        # From v2.4 training script (section 4.2, before ColumnTransformer fitting):
-        # These are the *original* or *app-engineered* column names.
         expected_numerical = sorted(
             ['age', 'campaign', 'cons.conf.idx', 'cons.price.idx', 'emp.var.rate', 'euribor3m', 'euribor_emp_rate_diff',
              'not_previously_contacted', 'nr.employed', 'pdays', 'previous'])
         expected_cat_impute = sorted(
-            ['education', 'housing', 'job', 'loan', 'marital'])  # Original names designated for imputation
+            ['education', 'housing', 'job', 'loan', 'marital'])
         expected_cat_direct_ohe = sorted(
             ['age_group', 'campaign_binned', 'contact', 'default', 'job_education', 'poutcome',
-             'poutcome_x_job'])  # Original/App-Engineered names for direct OHE
+             'poutcome_x_job'])
 
         final_expected_cols_for_pipeline = expected_numerical + expected_cat_impute + expected_cat_direct_ohe
         final_expected_cols_for_pipeline = list(
-            OrderedDict.fromkeys(final_expected_cols_for_pipeline))  # Ensure unique and ordered
+            OrderedDict.fromkeys(final_expected_cols_for_pipeline))
 
-        # Ensure all expected columns are present and in the correct order
         missing_cols = [col for col in final_expected_cols_for_pipeline if col not in input_df_engineered.columns]
         if missing_cols:
             st.error(
@@ -227,10 +225,8 @@ def main():
 
             st.markdown(f"""
             **Note on Thresholds:**
-            - The "Optimal Threshold" of `{OPTIMAL_THRESHOLD:.2f}` was (or should be) determined during model training to balance metrics like Precision and Recall for the 'yes' class, often by maximizing the F1-score. This can be more insightful for imbalanced datasets than the default 0.5 threshold.
+            - The "Optimal Threshold" of `{OPTIMAL_THRESHOLD:.2f}` should be determined during model training to balance metrics like Precision and Recall for the 'yes' class.
             """)
-            # st.dataframe(input_df_for_pipeline.T.rename(columns={0:"Input to Model (Post App FE)"}))
-
 
         except Exception as e:
             st.error(f"An error occurred during prediction: {e}")
@@ -240,7 +236,8 @@ def main():
         st.info("Please fill in the customer details in the sidebar and click 'Predict Subscription'.")
 
     st.sidebar.markdown("---")
-    st.sidebar.markdown("Based on ML pipeline v2.4")
+    st.sidebar.info(
+        "This prediction is based on a machine learning model. For critical decisions, please consult with a financial advisor.")
 
 
 if __name__ == "__main__":
